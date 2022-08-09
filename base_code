@@ -1,14 +1,11 @@
 import numpy as np
 import pandas as pd
-import os
 import ast
+from nltk.stem.porter import PorterStemmer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import MinMaxScaler
 import pickle
-
-for dirname, _, filenames in os.walk('/kaggle/input'):
-    for filename in filenames:
-        print(os.path.join(dirname, filename))
 
 def convert(text):
     L = []
@@ -23,34 +20,42 @@ def fetch_director(text):
             L.append(i['name'])
     return L
 
-def collapse(L):
-    L1 = []
-    for i in L:
-        L1.append(i.replace(" ", ""))
-    return L1
+def stem(text):
+    ps = PorterStemmer()
+    L = []
+    for i in text.split():
+        L.append(ps.stem(i))
+    return " ".join(L)
 
 movies = pd.read_csv('/kaggle/input/tmdb-movie-metadata/tmdb_5000_movies.csv')
 credits = pd.read_csv('/kaggle/input/tmdb-movie-metadata/tmdb_5000_credits.csv')
 movies = movies.merge(credits, on = 'title')
-movies = movies[['movie_id', 'title', 'overview', 'genres', 'keywords', 'cast', 'crew']]
+movies = movies[['movie_id', 'title', 'overview', 'genres', 'keywords', 'cast', 'crew', 'popularity', 'revenue', 'vote_average', 'vote_count']]
+movies['vote_points'] = movies['vote_average'] * movies['vote_count']
+movies.drop(['vote_average', 'vote_count'], axis = 'columns', inplace = True)
 movies.dropna(inplace = True)
 movies['genres'] = movies['genres'].apply(convert)
 movies['keywords'] = movies['keywords'].apply(convert)
 movies['cast'] = movies['cast'].apply(convert)
 movies['cast'] = movies['cast'].apply(lambda x: x[0: 3])
 movies['crew'] = movies['crew'].apply(fetch_director)
-movies['genres'] = movies['genres'].apply(collapse)
-movies['keywords'] = movies['keywords'].apply(collapse)
-movies['cast'] = movies['cast'].apply(collapse)
-movies['crew'] = movies['crew'].apply(collapse)
+movies['genres'] = movies['genres'].apply(lambda x: [i.replace(' ', '') for i in x])
+movies['keywords'] = movies['keywords'].apply(lambda x: [i.replace(' ', '') for i in x])
+movies['cast'] = movies['cast'].apply(lambda x: [i.replace(' ', '') for i in x])
+movies['crew'] = movies['crew'].apply(lambda x: [i.replace(' ', '') for i in x])
 movies['overview'] = movies['overview'].apply(lambda x: x.split())
 movies['tags'] = movies['overview'] + movies['genres'] + movies['keywords'] + movies['cast'] + movies['crew']
 new = movies.drop(columns = ['overview', 'genres', 'keywords', 'cast', 'crew'])
-new['tags'] = new['tags'].apply(lambda x: " ".join(x))
+new['tags'] = new['tags'].apply(lambda x: ' '.join(x))
+new['tags'] = new['tags'].apply(lambda x: x.lower())
+new['tags'] = new['tags'].apply(stem)
 
 cv = CountVectorizer(max_features = 5000, stop_words = 'english')
-vector = cv.fit_transform(new['tags']).toarray()
-similarity = cosine_similarity(vector)
+tag_vector = cv.fit_transform(new['tags']).toarray()
+mms = MinMaxScaler(feature_range = (0, 1))
+numeric_feature_vector = mms.fit_transform(data[['vote_points', 'revenue', 'popularity']])
+final_vector = np.concatenate((tag_vector, numeric_feature_vector), axis = 1)
+similarity = cosine_similarity(final_vector)
 
 pickle.dump(new, open('movie_list.pkl', 'wb'))
 pickle.dump(similarity, open('similarity.pkl', 'wb'))
