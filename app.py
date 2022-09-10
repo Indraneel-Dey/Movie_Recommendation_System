@@ -13,7 +13,7 @@ def link(title):
 
 
 def fetch_poster(movie_id):
-    response = requests.get(f'https://api.themoviedb.org/3/movie/{movie_id}?api_key=3d3c70e12fe89b2d79173248adb605d7&language=en-US')
+    response = requests.get(f'https://api.themoviedb.org/3/movie/{movie_id}?api_key=API_KEY&language=en-US')
     data = response.json()
     try:
         return 'https://image.tmdb.org/t/p/w500/' + data['poster_path']
